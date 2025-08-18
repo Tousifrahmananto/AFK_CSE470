@@ -11,6 +11,7 @@ import ProfilePage from "./pages/ProfilePage";
 
 import CreateTeamPage from "./pages/CreateTeamPage";       // ← import
 import MyTeamPage from "./pages/MyTeamPage";           // ← import
+import BracketPage from "./pages/BracketPage";
 
 function AppWrapper() {
   const { pathname } = useLocation();
@@ -34,6 +35,8 @@ function AppWrapper() {
         <Route path="/teams/create" element={<CreateTeamPage />} />
         <Route path="/teams/my" element={<MyTeamPage />} />
         {/* fallback or 404 could go here */}
+        <Route path="/tournaments/:id/bracket" element={<BracketPage />} />
+
       </Routes>
     </>
   );

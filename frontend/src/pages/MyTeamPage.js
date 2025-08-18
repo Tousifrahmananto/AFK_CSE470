@@ -1,4 +1,3 @@
-// src/pages/MyTeamPage.js
 import React, { useContext, useEffect, useState } from "react";
 import axios from "axios";
 import { AuthContext } from "../context/AuthContext";
@@ -9,10 +8,8 @@ export default function MyTeamPage() {
     const [allPlayers, setAllPlayers] = useState([]);
     const [selectedPlayer, setSelectedPlayer] = useState("");
 
-    // Base API URL
     const API = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
 
-    // Load “my team” and “all players” on mount
     useEffect(() => {
         if (!token) return;
 
@@ -38,14 +35,13 @@ export default function MyTeamPage() {
         return <div className="text-center mt-10">Loading…</div>;
     }
 
-    // Determine which players are not yet on this team
     const available = allPlayers.filter(
         (p) => !team.members.some((m) => m._id === p._id)
     );
 
-    const isCaptain = team.captain === user._id;
+    const captainId = typeof team.captain === "object" ? team.captain._id : team.captain;
+    const isCaptain = String(captainId) === String(user._id);
 
-    // Add selected player
     const addPlayer = async () => {
         if (!selectedPlayer) {
             alert("Select a player first");
@@ -65,7 +61,6 @@ export default function MyTeamPage() {
         }
     };
 
-    // Remove a member
     const removeMember = async (memberId) => {
         try {
             const res = await axios.delete(
@@ -79,7 +74,6 @@ export default function MyTeamPage() {
         }
     };
 
-    // Leave team
     const leaveTeam = async () => {
         try {
             await axios.post(
@@ -99,12 +93,20 @@ export default function MyTeamPage() {
             <div className="card p-6" style={{ maxWidth: 600, margin: "auto" }}>
                 <h2 className="text-2xl font-bold mb-4">{team.teamName}</h2>
 
+
+                {team.game && <p className="mb-2"><strong>Game:</strong> {team.game}</p>}
+                {team.region && <p className="mb-2"><strong>Region:</strong> {team.region}</p>}
+                {!!team.bio && <p className="mb-4">{team.bio}</p>}
+
                 <h3 className="font-semibold mb-2">Members</h3>
                 <ul className="mb-4">
                     {team.members.map((m) => (
                         <li key={m._id} className="flex justify-between mb-1">
-                            {m.username}
-                            {isCaptain && m._id !== team.captain && (
+                            <span>
+                                {m.username}
+                                {String(m._id) === String(captainId) ? " (Captain)" : ""}
+                            </span>
+                            {isCaptain && String(m._id) !== String(captainId) && (
                                 <button
                                     onClick={() => removeMember(m._id)}
                                     className="btn btn-sm"

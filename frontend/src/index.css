@@ -128,3 +128,104 @@ a:hover {
 .navbar button:hover {
   color: #f85149;
 }
+
+/* Bracket container & cards */
+.bracket {
+  display: flex;
+  gap: 48px;
+  align-items: flex-start;
+  padding-bottom: 16px;
+}
+
+.round-col {
+  min-width: 280px;
+}
+
+.round-title {
+  text-align: center;
+  font-weight: 600;
+  margin-bottom: 12px;
+  opacity: .9;
+}
+
+.match-box {
+  position: relative;
+  min-height: 78px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #12131c;
+  border: 1px solid #23263A;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, .35);
+}
+
+.match-box .meta {
+  font-size: 11px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  opacity: .55;
+  margin-bottom: 6px;
+}
+
+.match-box .row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.match-box .row+.row {
+  margin-top: 6px;
+}
+
+.match-box .row .muted {
+  opacity: .55;
+}
+
+.match-box .row .tick {
+  color: #2ea043;
+  margin-left: 8px;
+  font-weight: 700;
+}
+
+.match-box .btn-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.match-box .winner {
+  margin-top: 8px;
+  font-size: 13px;
+  opacity: .9;
+}
+
+/* dashed connectors */
+.match-box.with-connector {
+  margin-right: 28px;
+}
+
+.match-box.with-connector::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: -28px;
+  width: 28px;
+  height: 0;
+  border-top: 2px dashed #3b405a;
+}
+
+.match-box.with-connector::before {
+  content: "";
+  position: absolute;
+  right: -28px;
+  width: 0;
+  height: var(--v, 0px);
+  border-left: 2px dashed #3b405a;
+}
+
+.match-box.with-connector.top::before {
+  top: calc(50% - var(--v));
+}
+
+.match-box.with-connector.bottom::before {
+  top: 50%;
+}

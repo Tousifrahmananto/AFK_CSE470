@@ -1,40 +1,108 @@
-/* Removed Tailwind directives since Tailwind is not configured */
-
-.App {
-  text-align: center;
-}
-
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
-}
-
-.App-header {
-  background-color: #000000;
-  min-height: 100vh;
+/* === Bracket layout === */
+.bracket {
   display: flex;
-  flex-direction: column;
+  gap: 48px;
+  align-items: flex-start;
+  padding-bottom: 16px;
+}
+
+.round-col {
+  position: relative;
+  min-width: 280px;
+}
+
+.round-title {
+  text-align: center;
+  font-weight: 600;
+  margin-bottom: 12px;
+  opacity: 0.9;
+}
+
+.match-box {
+  position: relative;
+  min-height: 78px;
+  /* MATCH_H in JS */
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #12131c;
+  border: 1px solid #23263A;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+}
+
+/* content inside a match */
+.match-box .meta {
+  font-size: 11px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  opacity: .55;
+  margin-bottom: 6px;
+}
+
+.match-box .row {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
-  color: rgb(0, 0, 0);
+  justify-content: space-between;
 }
 
-.App-link {
-  color: #61dafb;
+.match-box .row+.row {
+  margin-top: 6px;
 }
 
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+.match-box .row .muted {
+  opacity: .55;
+}
+
+.match-box .row .tick {
+  color: #2ea043;
+  margin-left: 8px;
+  font-weight: 700;
+}
+
+.match-box .btn-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.match-box .winner {
+  margin-top: 8px;
+  font-size: 13px;
+  opacity: .9;
+}
+
+/* connector lines: horizontal to the right + vertical half-branch */
+.match-box.with-connector {
+  margin-right: 28px;
+}
+
+/* space for the horizontal line */
+
+.match-box.with-connector::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: -28px;
+  /* extend outside the card */
+  width: 28px;
+  height: 2px;
+  background: #3b405a;
+}
+
+/* vertical half: controlled via --v (px) coming from React */
+.match-box.with-connector::before {
+  content: "";
+  position: absolute;
+  right: -28px;
+  width: 2px;
+  height: var(--v, 0px);
+  background: #3b405a;
+}
+
+/* even index: vertical goes UP; odd index: vertical goes DOWN */
+.match-box.with-connector.top::before {
+  top: calc(50% - var(--v));
+}
+
+.match-box.with-connector.bottom::before {
+  top: 50%;
 }
