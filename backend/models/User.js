@@ -1,27 +1,21 @@
 const mongoose = require("mongoose");
 
+const ROLES = ["Admin", "TeamManager", "Player", "Sponsor", "Partner"];
+
 const userSchema = new mongoose.Schema(
     {
-        username: { type: String, required: true, trim: true },
-        email: { type: String, required: true, unique: true },
-        password: { type: String, required: true, minlength: 6 },
-        role: {
-            type: String,
-            enum: ["Admin", "Player", "TeamManager"],
-            default: "Player",
-        },
+        username: { type: String, required: true, trim: true, unique: true },
+        email: { type: String, required: true, trim: true, unique: true },
+        password: { type: String, required: true },
+        role: { type: String, enum: ROLES, default: "Player" },
         country: String,
-        team: String, // keep as-is per your current schema
+        team: String,
         profilePic: String,
-        stats: {
-            kdr: Number,
-            winRate: String,
-        },
-
-        // Kept for compatibility; we now compute joined tournaments from Tournament collection
+        stats: { kdr: Number, winRate: String },
         tournaments: [{ type: mongoose.Schema.Types.ObjectId, ref: "Tournament" }],
     },
     { timestamps: true }
 );
 
 module.exports = mongoose.model("User", userSchema);
+module.exports.ROLES = ROLES;

@@ -1,13 +1,31 @@
-import axios from "axios";
+const API = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
 
-const API_URL = "http://localhost:5000/api/auth";
+export async function register({ username, email, password, role }) {
+    // harden role values
+    const allowed = new Set(["Player", "Sponsor", "Partner"]);
+    const safeRole = allowed.has(role) ? role : "Player";
 
-export const register = async (userData) => {
-    const response = await axios.post(`${API_URL}/register`, userData);
-    return response.data;
-};
+    const res = await fetch(`${API}/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, email, password, role: safeRole }),
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || "Registration failed");
+    }
+    return res.json();
+}
 
-export const login = async (credentials) => {
-    const res = await axios.post(`${API_URL}/login`, credentials);
-    return res.data;
-};
+export async function login({ email, password }) {
+    const res = await fetch(`${API}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || "Login failed");
+    }
+    return res.json();
+}

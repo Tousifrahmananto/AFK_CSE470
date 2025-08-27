@@ -1,12 +1,23 @@
 const express = require("express");
 const router = express.Router();
-const { getUserProfile, getMyTournaments } = require("../controllers/userController");
-const { protect } = require("../middlewares/authMiddleware");
+const User = require("../models/User");
+const { protect: auth } = require("../middlewares/authMiddleware");
 
-// Current user’s joined tournaments (solo or via team)
-router.get("/me/tournaments", protect, getMyTournaments);
+const {
+    getUserPublic,
+    getUserProfile,
+    getMe,
+    getMyTournaments,
+} = require("../controllers/userController");
 
-// View any user profile by id (protected)
-router.get("/:id", protect, getUserProfile);
+// current user
+router.get("/me/profile", auth, getMe);
+router.get("/me/tournaments", auth, getMyTournaments);
+
+// minimal public info (still behind auth)
+router.get("/:id/public", auth, getUserPublic);
+
+// full profile
+router.get("/:id", auth, getUserProfile);
 
 module.exports = router;

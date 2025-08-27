@@ -1,0 +1,118 @@
+/* Everything is scoped under .afk-dashboard to avoid leaking styles */
+.afk-dashboard {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 48px;
+  align-items: center;
+  padding: 24px 36px;
+  color: #ffffff; /* matches your dark theme */
+}
+
+/* LEFT column */
+.afk-left {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  align-items: flex-start;
+}
+
+.afk-logo {
+  display: block;
+  object-fit: contain;
+
+  padding: 12px;
+  max-width: 100%;
+}
+
+/* Typewriter with accurate caret */
+.afk-typewriter {
+  margin: 0;
+  font-size: clamp(20px, 2.2vw, 28px);
+  font-weight: 600;
+  color: #fff;
+}
+
+.afk-typewriter-text {
+  position: relative;
+  display: inline-block;
+  overflow: hidden;
+  white-space: nowrap;
+  border-right: 2px solid #d1d5db;
+  width: 0ch;
+  animation:
+    afk-typing 2.4s steps(var(--chars), end) forwards,
+    afk-caret-blink .8s step-end infinite;
+}
+
+@keyframes afk-typing { to { width: calc(var(--chars) * 1ch); } }
+@keyframes afk-caret-blink {
+  0%, 100% { border-color: transparent; }
+  50%      { border-color: #d1d5db; }
+}
+
+/* RIGHT column */
+.afk-right { display: flex; justify-content: center; }
+
+.afk-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(380px, 90%);
+}
+
+/* White buttons with black text + subtle animated border glow */
+.afk-btn {
+  position: relative;
+  display: inline-block;
+  text-align: center;
+  padding: 14px 18px;
+  margin: 10px 0;
+  font-weight: 800;
+  border-radius: 12px;
+  text-decoration: none;
+  color: #0a0a0a;          /* black text */
+  background: #ffffff;     /* white background */
+  border: 1px solid #d1d5db;
+  transition: transform .06s ease, box-shadow .15s ease, border-color .15s ease;
+  overflow: hidden;
+}
+
+.afk-btn::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(90deg, #ffffff, #9ca3af, #ffffff);
+  background-size: 200% 100%;
+  animation: afk-neon-scan 2.8s linear infinite;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  pointer-events: none;
+  opacity: .9;
+}
+
+.afk-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 18px rgba(209,213,219,.35);
+  border-color: #e5e7eb;
+}
+
+@keyframes afk-neon-scan {
+  0%   { background-position: 0% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.afk-btn-wide { width: 100%; }
+
+/* Responsive */
+@media (max-width: 980px) {
+  .afk-dashboard {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+  .afk-left { align-items: center; text-align: center; }
+  .afk-typewriter { text-align: center; }
+}

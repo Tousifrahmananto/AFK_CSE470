@@ -1,3 +1,78 @@
+const PlayerStat = require("../models/PlayerStat");
+const mongoose = require("mongoose");
+const Tournament = require("../models/Tournament");
+
+/**
+ * POST /api/tournaments/:id/matches/:roundIndex/:matchIndex/player-stats
+ * Admin-only. Body: { stats: [{ userId, kills, deaths, assists, score }] }
+ */
+exports.recordPlayerStatsForMatch = async (req, res) => {
+  try {
+    const { id, roundIndex, matchIndex } = req.params;
+    const { stats } = req.body;
+    if (!Array.isArray(stats) || stats.length === 0) {
+      return res.status(400).json({ message: "stats array required" });
+    }
+
+    // Upsert each row (tournament + user + round + match)
+    const ops = stats.map(s => ({
+      updateOne: {
+        filter: {
+          tournament: id,
+          user: s.userId,
+          roundIndex: Number(roundIndex),
+          matchIndex: Number(matchIndex),
+        },
+        update: {
+          $set: {
+            kills: Number(s.kills || 0),
+            deaths: Number(s.deaths || 0),
+            assists: Number(s.assists || 0),
+            score: Number(s.score || 0),
+          }
+        },
+        upsert: true
+      }
+    }));
+
+    await PlayerStat.bulkWrite(ops);
+    res.json({ message: "Stats saved" });
+  } catch (err) {
+    console.error("recordPlayerStatsForMatch error:", err);
+    res.status(500).json({ message: "Failed to record stats" });
+  }
+};
+
+/**
+ * GET /api/tournaments/:id/matches/:roundIndex/:matchIndex/player-stats
+ * Admin-only. Returns existing entries (so you can edit).
+ */
+exports.getPlayerStatsForMatch = async (req, res) => {
+  try {
+    const { id, roundIndex, matchIndex } = req.params;
+    const rows = await PlayerStat.find({
+      tournament: id,
+      roundIndex: Number(roundIndex),
+      matchIndex: Number(matchIndex),
+    })
+      .populate("user", "username name role")
+      .lean();
+
+    res.json({
+      items: rows.map(r => ({
+        userId: String(r.user._id || r.user),
+        username: r.user?.username || r.user?.name || String(r.user),
+        kills: r.kills,
+        deaths: r.deaths,
+        assists: r.assists,
+        score: r.score,
+      }))
+    });
+  } catch (err) {
+    res.status(500).json({ message: "Failed to fetch stats" });
+  }
+};
+// server/controllers/tournamentController.js
 const Tournament = require("../models/Tournament");
 const User = require("../models/User");
 const Team = require("../models/Team");
@@ -12,6 +87,10 @@ const toDate = (v) => {
   return isNaN(d.getTime()) ? null : d;
 };
 const isPast = (d) => d && d.getTime() < Date.now();
+
+// Treat "", null, undefined as blank
+const isBlank = (v) =>
+  v === undefined || v === null || (typeof v === "string" && v.trim() === "");
 
 // shuffle + bracket helpers
 function fisherYatesShuffle(arr) {
@@ -139,7 +218,7 @@ async function buildLabelMaps(tournamentDoc) {
   const soloIds = tournamentDoc.soloPlayers || [];
 
   const teams = await Team.find({ _id: { $in: teamIds } })
-    .select("_id teamName")   // <- teamName here
+    .select("_id teamName")
     .lean();
 
   const users = await User.find({ _id: { $in: soloIds } })
@@ -246,20 +325,57 @@ exports.createTournament = async (req, res) => {
 exports.updateTournament = async (req, res) => {
   try {
     const normalized = normalizeBody(req.body);
+
+    // Optional validation for enums/date strings. Do not require missing fields.
     const { valid, errors } = validate(normalized, false);
     if (!valid) return res.status(400).json({ message: "Validation failed", errors });
+
     const updates = {};
-    [
-      "title", "game", "bracket", "status", "registrationOpen",
-      "startDate", "endDate", "registrationDeadline",
-      "playerLimit", "teamLimit", "description", "rules", "location", "prizePool", "entryFee",
-    ].forEach((k) => {
-      if (normalized[k] !== undefined) {
-        updates[k] = ["startDate", "endDate", "registrationDeadline"].includes(k)
-          ? toDate(normalized[k])
-          : normalized[k];
+
+    // strings: set only if non-blank
+    ["title", "game", "bracket", "status", "description", "rules", "location", "prizePool", "entryFee"]
+      .forEach((k) => { if (!isBlank(normalized[k])) updates[k] = normalized[k]; });
+
+    // boolean toggle (allow explicit false)
+    if (!isBlank(normalized.registrationOpen)) {
+      updates.registrationOpen = !!normalized.registrationOpen;
+    }
+
+    // numbers
+    if (!isBlank(normalized.playerLimit)) {
+      const p = Number(normalized.playerLimit);
+      if (Number.isNaN(p) || p < 0) return res.status(400).json({ message: "playerLimit must be >= 0" });
+      updates.playerLimit = p;
+    }
+    if (!isBlank(normalized.teamLimit)) {
+      const t = Number(normalized.teamLimit);
+      if (Number.isNaN(t) || t < 0) return res.status(400).json({ message: "teamLimit must be >= 0" });
+      updates.teamLimit = t;
+    }
+
+    // dates
+    for (const dk of ["startDate", "endDate", "registrationDeadline"]) {
+      if (!isBlank(normalized[dk])) {
+        const d = toDate(normalized[dk]);
+        if (!d) return res.status(400).json({ message: `${dk} is invalid` });
+        updates[dk] = d;
       }
-    });
+    }
+    if (updates.startDate && updates.endDate && updates.endDate < updates.startDate) {
+      return res.status(400).json({ message: "endDate must be after startDate" });
+    }
+    if (updates.registrationDeadline && updates.startDate && updates.registrationDeadline > updates.startDate) {
+      return res.status(400).json({ message: "registrationDeadline must be on/before startDate" });
+    }
+
+    // whitelist enums
+    if (updates.bracket && !BRACKETS.includes(updates.bracket)) {
+      return res.status(400).json({ message: "invalid bracket" });
+    }
+    if (updates.status && !STATUSES.includes(updates.status)) {
+      return res.status(400).json({ message: "invalid status" });
+    }
+
     const t = await Tournament.findByIdAndUpdate(req.params.id, updates, { new: true });
     if (!t) return res.status(404).json({ message: "Tournament not found" });
     res.json(t);
@@ -584,5 +700,113 @@ exports.setMatchResult = async (req, res) => {
   } catch (err) {
     console.error("setMatchResult error:", err);
     res.status(500).json({ message: "Failed to save match result" });
+  }
+};
+
+// ----------------- MATCH MEDIA HELPERS -----------------
+function ensureMedia(bd, r, m) {
+  if (!bd?.rounds || !bd.rounds[r] || !bd.rounds[r][m]) {
+    throw new Error("Match not found");
+  }
+  const match = bd.rounds[r][m];
+  if (!match.media) match.media = { videos: [], images: [] }; // initialize if missing
+  return match.media;
+}
+
+// GET /api/tournaments/:id/matches/:r/:m/media
+// ---------- MATCH MEDIA (list / upload / delete) ----------
+exports.getMatchMedia = async (req, res) => {
+  try {
+    const id = req.params.id;
+    const r = Number(req.params.r);
+    const m = Number(req.params.m);
+
+    const t = await Tournament.findById(id).select("title bracketData");
+    if (!t) return res.status(404).json({ message: "Tournament not found" });
+
+    const match = t.bracketData?.rounds?.[r]?.[m];
+    if (!match) return res.status(404).json({ message: "Match not found" });
+
+    const media = Array.isArray(match.media) ? match.media : [];
+    res.json({ title: t.title, media });
+  } catch (err) {
+    console.error("getMatchMedia error:", err);
+    res.status(500).json({ message: "Failed to load match media" });
+  }
+};
+
+exports.uploadMatchMedia = async (req, res) => {
+  try {
+    const id = req.params.id;
+    const r = Number(req.params.r);
+    const m = Number(req.params.m);
+
+    const t = await Tournament.findById(id).select("bracketData");
+    if (!t) return res.status(404).json({ message: "Tournament not found" });
+
+    // Ensure bracketData structure exists
+    t.bracketData = t.bracketData || {};
+    t.bracketData.rounds = Array.isArray(t.bracketData.rounds) ? t.bracketData.rounds : [];
+    t.bracketData.rounds[r] = Array.isArray(t.bracketData.rounds[r]) ? t.bracketData.rounds[r] : [];
+    t.bracketData.rounds[r][m] = t.bracketData.rounds[r][m] || {};
+    const match = t.bracketData.rounds[r][m];
+
+    if (!Array.isArray(req.files) || req.files.length === 0) {
+      return res.status(400).json({ message: "No files uploaded" });
+    }
+
+    // Ensure media array exists
+    match.media = Array.isArray(match.media) ? match.media : [];
+
+    const now = new Date().toISOString();
+    const added = req.files.map((f) => ({
+      _id: new mongoose.Types.ObjectId(),                 // <-- must use 'new'
+      kind: f.mimetype && f.mimetype.startsWith("video/") ? "video" : "image",
+      filename: f.filename,
+      originalname: f.originalname,
+      mimetype: f.mimetype,
+      size: f.size,
+      url: `/uploads/${f.filename}`,
+      uploadedBy: req.user?.userId || null,
+      createdAt: now,
+    }));
+
+    match.media.push(...added);
+    t.markModified("bracketData");                         // <-- necessary for Mixed
+    await t.save();
+
+    res.status(201).json({ message: "Uploaded", media: match.media });
+  } catch (err) {
+    console.error("uploadMatchMedia error:", err);
+    res.status(500).json({ message: "Failed to upload match media" });
+  }
+};
+
+exports.deleteMatchMedia = async (req, res) => {
+  try {
+    const id = req.params.id;
+    const r = Number(req.params.r);
+    const m = Number(req.params.m);
+    const mid = req.params.mid; // media _id as string
+
+    const t = await Tournament.findById(id).select("bracketData");
+    if (!t) return res.status(404).json({ message: "Tournament not found" });
+
+    const match = t.bracketData?.rounds?.[r]?.[m];
+    if (!match) return res.status(404).json({ message: "Match not found" });
+
+    const before = Array.isArray(match.media) ? match.media.length : 0;
+    match.media = (match.media || []).filter((x) => String(x._id) !== String(mid));
+
+    if (match.media.length === before) {
+      return res.status(404).json({ message: "Media not found" });
+    }
+    t.markModified("bracketData");
+    await t.save();
+
+    res.json({ message: "Deleted", media: match.media });
+  } catch (err) {
+    console.error("deleteMatchMedia error:", err);
+    res.status(500).json({ message: "Failed to delete media" });
   }
 };

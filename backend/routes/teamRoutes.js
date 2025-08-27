@@ -1,5 +1,7 @@
 const express = require("express");
 const router = express.Router();
+
+const { protect: auth } = require("../middlewares/authMiddleware");
 const {
     listPlayers,
     createTeam,
@@ -7,14 +9,17 @@ const {
     addMember,
     removeMember,
     leaveTeam,
+    getTeamPublic,
 } = require("../controllers/teamController");
-const { protect } = require("../middlewares/authMiddleware");
 
-router.get("/players", protect, listPlayers);
-router.post("/create", protect, createTeam);
-router.get("/my", protect, getMyTeam);
-router.post("/:teamId/add", protect, addMember);
-router.delete("/:teamId/remove/:userId", protect, removeMember);
-router.post("/:teamId/leave", protect, leaveTeam);
+router.get("/players", auth, listPlayers);
+router.post("/create", auth, createTeam);
+router.get("/my", auth, getMyTeam);
+router.post("/:teamId/add", auth, addMember);
+router.delete("/:teamId/remove/:userId", auth, removeMember);
+router.post("/:teamId/leave", auth, leaveTeam);
+
+// roster/public info for stat tools
+router.get("/:id", auth, getTeamPublic);
 
 module.exports = router;

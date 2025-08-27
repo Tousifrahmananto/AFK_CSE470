@@ -35,9 +35,10 @@ export default function MyTeamPage() {
         return <div className="text-center mt-10">Loading…</div>;
     }
 
-    const available = allPlayers.filter(
-        (p) => !team.members.some((m) => m._id === p._id)
-    );
+    // ✅ Defensive UX: also ensure the candidate has no team in DB
+    const available = allPlayers
+        .filter((p) => !p.team) // must NOT belong to any team
+        .filter((p) => !team.members.some((m) => m._id === p._id));
 
     const captainId = typeof team.captain === "object" ? team.captain._id : team.captain;
     const isCaptain = String(captainId) === String(user._id);
@@ -92,7 +93,6 @@ export default function MyTeamPage() {
         <div className="container mt-10">
             <div className="card p-6" style={{ maxWidth: 600, margin: "auto" }}>
                 <h2 className="text-2xl font-bold mb-4">{team.teamName}</h2>
-
 
                 {team.game && <p className="mb-2"><strong>Game:</strong> {team.game}</p>}
                 {team.region && <p className="mb-2"><strong>Region:</strong> {team.region}</p>}

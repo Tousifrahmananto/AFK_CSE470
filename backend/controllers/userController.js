@@ -1,86 +1,118 @@
+const mongoose = require("mongoose");
 const User = require("../models/User");
+const Team = require("../models/Team");
 const Tournament = require("../models/Tournament");
 
-// GET /api/users/:id
-const getUserProfile = async (req, res) => {
-    try {
-        const user = await User.findById(req.params.id)
-            .select("-password -passwordHash -__v") // keep sensitive fields out
-            .lean();
+/** Lightweight user info used by roster/stat tools */
+async function getUserPublic(req, res) {
+  try {
+    const u = await User.findById(req.params.id)
+      .select("_id username email role")
+      .lean();
+    if (!u) return res.status(404).json({ message: "User not found" });
+    res.json(u);
+  } catch (err) {
+    res.status(500).json({ message: "Failed to fetch user" });
+  }
+}
 
-        if (!user) return res.status(404).json({ message: "User not found" });
+// ---------- helpers ----------
+async function addEffectiveTeam(userLean) {
+  // if already populated, keep it
+  if (userLean.team && typeof userLean.team === "object") return userLean;
 
-        // Compute tournaments the user has joined (solo or via team)
-        const soloList = await Tournament.find({ soloPlayers: user._id })
-            .select("title game bracket status startDate")
-            .lean();
+  // fall back to membership search
+  const membership = await Team.findOne({ members: userLean._id })
+    .select("teamName name logoUrl")
+    .lean();
 
-        let teamList = [];
-        if (user.team) {
-            // If your User.team stores an ObjectId, you can use it directly; if it's a string id, this still works
-            teamList = await Tournament.find({ teams: user.team })
-                .select("title game bracket status startDate")
-                .lean();
-        }
+  if (membership) return { ...userLean, team: membership };
+  return userLean;
+}
 
-        const joinedTournaments = [
-            ...soloList.map((t) => ({ ...t, mode: "Solo" })),
-            ...teamList.map((t) => ({ ...t, mode: "Team" })),
-        ].sort((a, b) => new Date(a.startDate || 0) - new Date(b.startDate || 0));
+async function fetchJoinedTournaments(userId, teamId) {
+  const soloList = await Tournament.find({ soloPlayers: userId })
+    .select("title game bracket status startDate")
+    .lean();
 
-        return res.json({ ...user, joinedTournaments });
-    } catch (err) {
-        res.status(500).json({ message: "Server error", error: err.message });
+  let teamList = [];
+  if (teamId) {
+    teamList = await Tournament.find({ teams: teamId })
+      .select("title game bracket status startDate")
+      .lean();
+  }
+
+  return [
+    ...soloList.map(t => ({ ...t, mode: "Solo" })),
+    ...teamList.map(t => ({ ...t, mode: "Team" })),
+  ].sort((a, b) => new Date(a.startDate || 0) - new Date(b.startDate || 0));
+}
+
+// ---------- main profile handlers ----------
+async function getUserProfile(req, res) {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid user id" });
     }
-};
-exports.getMe = async (req, res) => {
-    try {
-        const me = await User.findById(req.user.userId)
-            .select("-password")
-            .populate({ path: "team", select: "teamName logoUrl" }); // ← teamName here
 
-        if (!me) return res.status(404).json({ message: "User not found" });
+    const raw = await User.findById(id)
+      .select("-password -passwordHash -__v")
+      .populate({ path: "team", select: "teamName name logoUrl" })
+      .lean();
 
-        // (unchanged) optionally return tournaments the user is in
-        const tournaments = await Tournament.find({
-            $or: [
-                { soloPlayers: me._id },
-                ...(me.team ? [{ teams: me.team._id }] : []),
-            ],
-        }).select("title game bracket startDate status").lean();
+    if (!raw) return res.status(404).json({ message: "User not found" });
 
-        res.json({ user: me, tournaments });
-    } catch (err) {
-        res.status(500).json({ message: "Failed to load profile" });
+    const user = await addEffectiveTeam(raw);
+    const teamId = user.team?._id;
+    const joinedTournaments = await fetchJoinedTournaments(user._id, teamId);
+
+    return res.json({ ...user, joinedTournaments });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+}
+
+async function getMe(req, res) {
+  try {
+    const meRaw = await User.findById(req.user.userId)
+      .select("-password -passwordHash -__v")
+      .populate({ path: "team", select: "teamName name logoUrl" })
+      .lean();
+
+    if (!meRaw) return res.status(404).json({ message: "User not found" });
+
+    const me = await addEffectiveTeam(meRaw);
+    const teamId = me.team?._id;
+    const tournaments = await fetchJoinedTournaments(me._id, teamId);
+
+    res.json({ user: me, tournaments });
+  } catch (err) {
+    res.status(500).json({ message: "Failed to load profile" });
+  }
+}
+
+async function getMyTournaments(req, res) {
+  try {
+    const me = await User.findById(req.user.userId).select("team").lean();
+    if (!me) return res.status(404).json({ message: "User not found" });
+
+    let teamId = me.team;
+    if (!teamId) {
+      const membership = await Team.findOne({ members: me._id }).select("_id").lean();
+      teamId = membership?._id || null;
     }
+
+    const items = await fetchJoinedTournaments(req.user.userId, teamId);
+    res.json(items);
+  } catch (err) {
+    res.status(500).json({ message: "Failed to fetch your tournaments" });
+  }
+}
+
+module.exports = {
+  getUserPublic,
+  getUserProfile,
+  getMe,
+  getMyTournaments,
 };
-
-// GET /api/users/me/tournaments  (protected)
-const getMyTournaments = async (req, res) => {
-    try {
-        const me = await User.findById(req.user.userId).select("team").lean();
-        if (!me) return res.status(404).json({ message: "User not found" });
-
-        const soloList = await Tournament.find({ soloPlayers: req.user.userId })
-            .select("title game bracket status startDate")
-            .lean();
-
-        let teamList = [];
-        if (me.team) {
-            teamList = await Tournament.find({ teams: me.team })
-                .select("title game bracket status startDate")
-                .lean();
-        }
-
-        const items = [
-            ...soloList.map((t) => ({ ...t, mode: "Solo" })),
-            ...teamList.map((t) => ({ ...t, mode: "Team" })),
-        ].sort((a, b) => new Date(a.startDate || 0) - new Date(b.startDate || 0));
-
-        res.json(items);
-    } catch (err) {
-        res.status(500).json({ message: "Failed to fetch your tournaments" });
-    }
-};
-
-module.exports = { getUserProfile, getMyTournaments };
