@@ -10,8 +10,12 @@ if (!fs.existsSync(UPLOAD_ROOT)) {
 
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        // keep everything under /uploads; you can subfolder by type if you prefer
-        cb(null, UPLOAD_ROOT);
+        // place images/videos into separate subfolders so controller URLs match (/uploads/images/... or /uploads/videos/...)
+        const isImage = /^image\//i.test(file.mimetype);
+        const sub = isImage ? "images" : "videos";
+        const dir = path.join(UPLOAD_ROOT, sub);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        cb(null, dir);
     },
     filename: (req, file, cb) => {
         const ext = path.extname(file.originalname || "");

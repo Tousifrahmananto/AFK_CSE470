@@ -1,21 +1,35 @@
+// backend/models/User.js
 const mongoose = require("mongoose");
 
-const ROLES = ["Admin", "TeamManager", "Player", "Sponsor", "Partner"];
-
-const userSchema = new mongoose.Schema(
+const UserSchema = new mongoose.Schema(
     {
-        username: { type: String, required: true, trim: true, unique: true },
-        email: { type: String, required: true, trim: true, unique: true },
+        name: { type: String, default: "" },
+        username: { type: String, required: true, unique: true, trim: true },
+        email: { type: String, required: true, unique: true, trim: true },
         password: { type: String, required: true },
-        role: { type: String, enum: ROLES, default: "Player" },
-        country: String,
-        team: String,
-        profilePic: String,
-        stats: { kdr: Number, winRate: String },
-        tournaments: [{ type: mongoose.Schema.Types.ObjectId, ref: "Tournament" }],
+        role: {
+            type: String,
+            enum: ["Admin", "Player", "TeamManager", "Sponsor", "Partner"],
+            default: "Player",
+            index: true,
+        },
+
+        // Team reference (optional)
+        team: { type: mongoose.Schema.Types.ObjectId, ref: "Team", default: null },
+
+        // --- Moderation flags (soft-ban) ---
+        // keep both for backward compatibility
+        banned: { type: Boolean, default: false, index: true },
+        isBanned: { type: Boolean, default: false }, // if older docs used this
+        bannedAt: { type: Date, default: null },
+        bannedReason: { type: String, default: "" },
     },
     { timestamps: true }
 );
 
-module.exports = mongoose.model("User", userSchema);
-module.exports.ROLES = ROLES;
+// Normalize "isBanned" for older docs
+UserSchema.virtual("effectiveBanned").get(function () {
+    return !!(this.banned || this.isBanned);
+});
+
+module.exports = mongoose.model("User", UserSchema);

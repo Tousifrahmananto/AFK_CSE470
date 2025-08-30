@@ -14,7 +14,7 @@ import Navbar from "./components/Navbar";
 import Dashboard from "./components/Dashboard";
 import ToastHost from "./components/ToastHost";
 import AdminMatchStatsPage from "./pages/AdminMatchStatsPage";
-
+import AdminUserModerationPage from "./pages/AdminUserModerationPage";
 import MediaGalleryPage from "./pages/MediaGalleryPage";
 import AdminMediaPage from "./pages/AdminMediaPage";
 import MyAdsPage from "./pages/MyAdsPage" // when you add it
@@ -26,6 +26,7 @@ import RegisterPage from "./pages/RegisterPage";
 import TournamentsPage from "./pages/TournamentsPage";
 import BracketPage from "./pages/BracketPage";
 import ProfilePage from "./pages/ProfilePage";
+import MediaGallery from './pages/MediaGallery';
 
 // Team management
 import CreateTeamPage from "./pages/CreateTeamPage";
@@ -62,6 +63,7 @@ function AppFrame() {
 
         {/* Admin */}
         <Route path="/admin/create-tournament" element={<CreateTournamentPage />} />
+        <Route path="/admin/user-moderation" element={<AdminUserModerationPage />} />
 
         {/* Team Manager (support both old and new paths) */}
         <Route path="/create-team" element={<CreateTeamPage />} />
@@ -78,7 +80,7 @@ function AppFrame() {
         <Route path="/gallery" element={<MediaGalleryPage />} />
         <Route path="/admin/media" element={<AdminMediaPage />} />
         <Route path="/ads/mine" element={<MyAdsPage />} />
-
+        <Route path="/media" element={<MediaGallery />} />
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
         <Route path="/leaderboard" element={<LeaderboardPage />} />

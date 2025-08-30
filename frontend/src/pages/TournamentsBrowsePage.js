@@ -10,6 +10,7 @@ import {
     getBracket,
 } from "../services/tournamentService";
 import { useToast } from "../components/ToastHost";
+import AdSlot from "../components/AdSlot"; // ← added
 
 const STATUSES = ["All", "Upcoming", "Live", "Completed"];
 
@@ -196,6 +197,11 @@ export default function TournamentsBrowsePage() {
 
             <div className="tb-container">
                 <div className="tb-title">Tournaments</div>
+
+                {/* === Sponsor/Partner Ads for browse page === */}
+                <div style={{ margin: "0 0 14px 0" }}>
+                    <AdSlot category="TournamentBrowse" />
+                </div>
 
                 <div className="tb-card" style={{ marginBottom: 12 }}>
                     <div className="tb-filter">

@@ -1,11 +1,19 @@
 const PlayerStat = require("../models/PlayerStat");
 const mongoose = require("mongoose");
 const Tournament = require("../models/Tournament");
-
+const Media = require("../models/Media");
 /**
  * POST /api/tournaments/:id/matches/:roundIndex/:matchIndex/player-stats
  * Admin-only. Body: { stats: [{ userId, kills, deaths, assists, score }] }
  */
+function toAbsoluteUrl(req, p) {
+  if (!p) return "";
+  if (/^https?:\/\//i.test(p)) return p; // already absolute (external/CDN)
+  // infer origin from the current request
+  const proto = (req.headers["x-forwarded-proto"] || req.protocol || "http");
+  const host = req.headers["x-forwarded-host"] || req.headers.host;
+  return `${proto}://${host}${p.startsWith("/") ? "" : "/"}${p}`;
+}
 exports.recordPlayerStatsForMatch = async (req, res) => {
   try {
     const { id, roundIndex, matchIndex } = req.params;
@@ -73,7 +81,6 @@ exports.getPlayerStatsForMatch = async (req, res) => {
   }
 };
 // server/controllers/tournamentController.js
-const Tournament = require("../models/Tournament");
 const User = require("../models/User");
 const Team = require("../models/Team");
 
@@ -717,96 +724,165 @@ function ensureMedia(bd, r, m) {
 // ---------- MATCH MEDIA (list / upload / delete) ----------
 exports.getMatchMedia = async (req, res) => {
   try {
-    const id = req.params.id;
+    const { id } = req.params;
     const r = Number(req.params.r);
     const m = Number(req.params.m);
+    const matchId = `r=${r}&m=${m}`;
 
-    const t = await Tournament.findById(id).select("title bracketData");
-    if (!t) return res.status(404).json({ message: "Tournament not found" });
+    // (Optional) title for header
+    const t = await Tournament.findById(id).select("title");
+    const title = t?.title || "";
 
-    const match = t.bracketData?.rounds?.[r]?.[m];
-    if (!match) return res.status(404).json({ message: "Match not found" });
+    const items = await Media.find({ tournament: id, matchId, visibility: "Public" })
+      .sort({ createdAt: -1 })
+      .lean();
 
-    const media = Array.isArray(match.media) ? match.media : [];
-    res.json({ title: t.title, media });
+    const videos = items
+      .filter(x => x.kind === "video")
+      .map(x => ({ _id: x._id, url: toAbsoluteUrl(req, x.filePath || x.externalUrl), originalName: x.title }));
+
+    const images = items
+      .filter(x => x.kind === "image")
+      .map(x => ({ _id: x._id, url: toAbsoluteUrl(req, x.filePath || x.externalUrl), originalName: x.title }));
+
+    res.json({ title, media: { videos, images } });
+
   } catch (err) {
-    console.error("getMatchMedia error:", err);
+    console.error("getMatchMedia (DB) error:", err);
     res.status(500).json({ message: "Failed to load match media" });
   }
 };
 
+// At top
+// top of file (ensure this exists)
+
+// POST /api/tournaments/:id/matches/:r/:m/media
+// multipart: "files"[] + body.kind = "video" | "image"
 exports.uploadMatchMedia = async (req, res) => {
   try {
-    const id = req.params.id;
+    const { id } = req.params;
     const r = Number(req.params.r);
     const m = Number(req.params.m);
+    const { kind } = req.body;
 
-    const t = await Tournament.findById(id).select("bracketData");
-    if (!t) return res.status(404).json({ message: "Tournament not found" });
-
-    // Ensure bracketData structure exists
-    t.bracketData = t.bracketData || {};
-    t.bracketData.rounds = Array.isArray(t.bracketData.rounds) ? t.bracketData.rounds : [];
-    t.bracketData.rounds[r] = Array.isArray(t.bracketData.rounds[r]) ? t.bracketData.rounds[r] : [];
-    t.bracketData.rounds[r][m] = t.bracketData.rounds[r][m] || {};
-    const match = t.bracketData.rounds[r][m];
-
-    if (!Array.isArray(req.files) || req.files.length === 0) {
-      return res.status(400).json({ message: "No files uploaded" });
+    if (!["image", "video"].includes(kind)) {
+      return res.status(400).json({ message: "kind must be 'image' or 'video'" });
     }
 
-    // Ensure media array exists
-    match.media = Array.isArray(match.media) ? match.media : [];
+    // Ensure tournament exists (and avoid ObjectId cast surprises)
+    const t = await Tournament.findById(id).select("_id");
+    if (!t) return res.status(404).json({ message: "Tournament not found" });
 
-    const now = new Date().toISOString();
-    const added = req.files.map((f) => ({
-      _id: new mongoose.Types.ObjectId(),                 // <-- must use 'new'
-      kind: f.mimetype && f.mimetype.startsWith("video/") ? "video" : "image",
-      filename: f.filename,
-      originalname: f.originalname,
-      mimetype: f.mimetype,
-      size: f.size,
-      url: `/uploads/${f.filename}`,
-      uploadedBy: req.user?.userId || null,
-      createdAt: now,
-    }));
+    const files = Array.isArray(req.files) ? req.files : [];
+    if (!files.length) {
+      return res.status(400).json({ message: "No files uploaded (field name must be 'files')" });
+    }
 
-    match.media.push(...added);
-    t.markModified("bracketData");                         // <-- necessary for Mixed
-    await t.save();
+    // Validate mimes against what multer allows (helps surface which file was rejected)
+    const allowed = new Set([
+      "image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif",
+      "video/mp4", "video/webm", "video/ogg", "video/quicktime",
+    ]); // matches backend/utils/uploader.js:contentReference[oaicite:6]{index=6}
 
-    res.status(201).json({ message: "Uploaded", media: match.media });
+    for (const f of files) {
+      if (!allowed.has(f.mimetype)) {
+        return res.status(400).json({ message: `Unsupported file type: ${f.mimetype}` });
+      }
+    }
+
+    const matchId = `r=${r}&m=${m}`;
+
+    // Build the filePath exactly how uploader stores on disk:
+    // uploader puts images in uploads/images and videos in uploads/videos:contentReference[oaicite:7]{index=7}
+    // build docs to insert
+    const docs = files.map((f) => {
+      const isImage = /^image\//i.test(f.mimetype);
+      const sub = isImage ? "images" : "videos";
+      const relPath = `/uploads/${sub}/${f.filename}`;
+      return {
+        kind: isImage ? "image" : "video",
+        tournament: id,
+        matchId,
+        title: f.originalname,
+        description: "",
+        filePath: relPath,          // keep relative in DB
+        externalUrl: "",
+        thumbnailUrl: "",
+        category: "Full Match",
+        game: "",
+        visibility: "Public",
+        uploadedBy: req.user?.userId || null,
+      };
+    });
+
+    await Media.insertMany(docs);
+
+    // fresh list
+    const items = await Media.find({ tournament: id, matchId, visibility: "Public" })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // ⬇️ ensure absolute URLs in the API response
+    const videos = items
+      .filter(x => x.kind === "video")
+      .map(x => ({
+        _id: x._id,
+        url: toAbsoluteUrl(req, x.filePath || x.externalUrl),
+        originalName: x.title
+      }));
+
+    const images = items
+      .filter(x => x.kind === "image")
+      .map(x => ({
+        _id: x._id,
+        url: toAbsoluteUrl(req, x.filePath || x.externalUrl),
+        originalName: x.title
+      }));
+
+    return res.status(201).json({ message: "Uploaded", media: { videos, images } });
   } catch (err) {
+    // Surface the real error to the client for this endpoint
     console.error("uploadMatchMedia error:", err);
-    res.status(500).json({ message: "Failed to upload match media" });
+    return res.status(500).json({ message: `Failed to upload match media: ${err.message || err}` });
   }
 };
 
 exports.deleteMatchMedia = async (req, res) => {
   try {
-    const id = req.params.id;
+    const { id } = req.params;
     const r = Number(req.params.r);
     const m = Number(req.params.m);
-    const mid = req.params.mid; // media _id as string
+    const { kind, url } = req.body || {};
+    const matchId = `r=${r}&m=${m}`;
 
-    const t = await Tournament.findById(id).select("bracketData");
-    if (!t) return res.status(404).json({ message: "Tournament not found" });
-
-    const match = t.bracketData?.rounds?.[r]?.[m];
-    if (!match) return res.status(404).json({ message: "Match not found" });
-
-    const before = Array.isArray(match.media) ? match.media.length : 0;
-    match.media = (match.media || []).filter((x) => String(x._id) !== String(mid));
-
-    if (match.media.length === before) {
-      return res.status(404).json({ message: "Media not found" });
+    if (!["video", "image"].includes(kind)) {
+      return res.status(400).json({ message: "Invalid kind" });
     }
-    t.markModified("bracketData");
-    await t.save();
+    if (!url) return res.status(400).json({ message: "url required" });
 
-    res.json({ message: "Deleted", media: match.media });
+    const doc = await Media.findOneAndDelete({
+      tournament: id,
+      matchId,
+      kind,
+      $or: [{ filePath: url }, { externalUrl: url }],
+    });
+
+    if (!doc) return res.status(404).json({ message: "Item not found" });
+
+    const items = await Media.find({ tournament: id, matchId, visibility: "Public" })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const videos = items
+      .filter(x => x.kind === "video")
+      .map(x => ({ _id: x._id, url: x.filePath || x.externalUrl, originalName: x.title }));
+    const images = items
+      .filter(x => x.kind === "image")
+      .map(x => ({ _id: x._id, url: x.filePath || x.externalUrl, originalName: x.title }));
+
+    res.json({ message: "Removed", media: { videos, images } });
   } catch (err) {
-    console.error("deleteMatchMedia error:", err);
-    res.status(500).json({ message: "Failed to delete media" });
+    console.error("deleteMatchMedia (DB) error:", err);
+    res.status(500).json({ message: "Failed to remove media" });
   }
 };

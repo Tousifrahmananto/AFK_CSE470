@@ -6,6 +6,7 @@ import {
     getBracket,
     setMatchResult,
 } from "../services/tournamentService";
+import AdSlot from "../components/AdSlot"; // ← added (non-breaking)
 
 export default function BracketPage() {
     const { token, user } = useContext(AuthContext);
@@ -52,6 +53,11 @@ export default function BracketPage() {
         <div style={wrap}>
             <div style={panel}>
                 <h1 style={{ margin: 0 }}>{title || "Tournament"} — Bracket</h1>
+
+                {/* ===== Sponsor/Partner Ads (top area) ===== */}
+                <div style={adTopBox}>
+                    <AdSlot category="BracketTop" />
+                </div>
 
                 <div style={board}>
                     {rounds.map((round, rIdx) => (
@@ -121,6 +127,11 @@ export default function BracketPage() {
                         </div>
                     ))}
                 </div>
+
+                {/* ===== Optional second ad slot under bracket (non-intrusive) ===== */}
+                <div style={adBottomBox}>
+                    <AdSlot category="BracketBottom" />
+                </div>
             </div>
         </div>
     );
@@ -139,3 +150,7 @@ const winnerLine = { marginTop: 4, fontSize: 14, color: "#a8f0b0" };
 const btnRow = { display: "flex", gap: 8, marginTop: 6 };
 const btnWin = { padding: "9px 12px", borderRadius: 10, background: "#1a7f30", color: "#fff", border: "0", cursor: "pointer" };
 const btnEdit = { marginTop: 6, padding: "8px 10px", borderRadius: 10, background: "#232a41", color: "#e8ecf2", border: "1px solid #2e3753", cursor: "pointer" };
+
+/* --- added minimal ad styles --- */
+const adTopBox = { marginTop: 8, marginBottom: 8 };
+const adBottomBox = { marginTop: 12, marginBottom: 4 };

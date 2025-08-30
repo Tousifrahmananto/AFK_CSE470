@@ -1,23 +1,35 @@
+// backend/routes/userRoutes.js
 const express = require("express");
 const router = express.Router();
-const User = require("../models/User");
-const { protect: auth } = require("../middlewares/authMiddleware");
+
+const { protect } = require("../middlewares/authMiddleware");
+const { isAdmin } = require("../middlewares/adminMiddleware");
 
 const {
     getUserPublic,
     getUserProfile,
     getMe,
     getMyTournaments,
+    adminListUsers,
+    softBanUser,
+    unbanUser,
 } = require("../controllers/userController");
 
-// current user
-router.get("/me/profile", auth, getMe);
-router.get("/me/tournaments", auth, getMyTournaments);
+// Authenticated profile routes
+router.get("/me/profile", protect, getMe);
+router.get("/me/tournaments", protect, getMyTournaments);
+router.get("/:id/profile", protect, getUserProfile);
 
-// minimal public info (still behind auth)
-router.get("/:id/public", auth, getUserPublic);
+// Admin moderation (must come before param routes)
+router.get("/admin", protect, isAdmin, adminListUsers);
 
-// full profile
-router.get("/:id", auth, getUserProfile);
+// 🔧 NEW: alias to match frontend call /users/moderation
+router.get("/moderation", protect, isAdmin, adminListUsers);
+
+router.post("/:id/soft-ban", protect, isAdmin, softBanUser);
+router.post("/:id/unban", protect, isAdmin, unbanUser);
+
+// Public lightweight profile (keep last so it doesn't shadow other routes)
+router.get("/:id", getUserPublic);
 
 module.exports = router;

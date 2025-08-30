@@ -8,7 +8,7 @@ const cors = require("cors");
 const mongoose = require("mongoose");
 const { Server } = require("socket.io");
 const path = require("path");
-
+const fs = require("fs");
 // Routers
 const authRoutes = require("./routes/authRoutes");
 const userRoutes = require("./routes/userRoutes");
@@ -34,6 +34,9 @@ const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: ORIGIN, credentials: true },
 });
+const uploadsDir = path.join(__dirname, "uploads");
+console.log("[static] /uploads ->", uploadsDir, "exists:", fs.existsSync(uploadsDir));
+app.use("/uploads", express.static(uploadsDir));
 
 // expose io so controllers can do: const io = req.app.get('io')
 app.set("io", io);
@@ -70,6 +73,19 @@ app.use("/api/teams", teamRoutes);
 app.use("/api/notifications", protect, notificationRoutes);
 app.use("/api/leaderboard", leaderboardRoutes);
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+app.use("/uploads", express.static(uploadsDir));
+app.use("/api/media", require("./routes/mediaRoutes"));
+
+app.use(cors({
+  origin: ["http://localhost:3000"],
+  credentials: true,
+  allowedHeaders: ["Content-Type", "Authorization"],
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+}));
+app.use("/api/media", (req, res, next) => {
+  res.set("Cache-Control", "no-store");
+  next();
+});
 /* ------------------------------- DB & Start ------------------------------- */
 const MONGO_URI =
   process.env.MONGO_URI || "mongodb://127.0.0.1:27017/afk_productions";

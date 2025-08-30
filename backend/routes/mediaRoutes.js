@@ -1,23 +1,31 @@
 // backend/routes/mediaRoutes.js
 const router = require("express").Router();
 const { protect } = require("../middlewares/authMiddleware");
-// ⬇️ import the default uploader (multer instance) instead of { videoUpload }
+const { isAdmin } = require("../middlewares/adminMiddleware");
 const uploader = require("../utils/uploader");
 const MC = require("../controllers/mediaController");
 
-// simple role gate
-const requireRole = (...roles) => (req, res, next) => {
-    if (!req.user) return res.status(401).json({ message: "Unauthorized" });
-    if (!roles.includes(req.user.role)) return res.status(403).json({ message: "Forbidden" });
-    next();
-};
+// Admin-only gate
+const requireAdmin = [protect, isAdmin];
 
-// Admin video CRUD
-router.post("/videos", protect, requireRole("Admin"), uploader.single("file"), MC.createVideo);
-router.put("/videos/:id", protect, requireRole("Admin"), uploader.single("file"), MC.updateVideo);
-router.delete("/videos/:id", protect, requireRole("Admin"), MC.deleteVideo);
+// ---------- Unified Admin CRUD ----------
+router.post("/", requireAdmin, uploader.single("file"), MC.createMedia);
+router.put("/:id", requireAdmin, uploader.single("file"), MC.updateMedia);
+router.delete("/:id", requireAdmin, MC.deleteMedia);
 
-// Public list
-router.get("/videos", MC.listVideos);
+// ---------- Public list ----------
+router.get("/", MC.listMedia);
+
+// ---------- Backward-compatible video endpoints ----------
+router.post("/videos", requireAdmin, uploader.single("file"), (req, res, next) => {
+  req.body.kind = "video";
+  return MC.createMedia(req, res, next);
+});
+router.put("/videos/:id", requireAdmin, uploader.single("file"), MC.updateMedia);
+router.delete("/videos/:id", requireAdmin, MC.deleteMedia);
+router.get("/videos", (req, res, next) => {
+  req.query.kind = "video";
+  return MC.listMedia(req, res, next);
+});
 
 module.exports = router;

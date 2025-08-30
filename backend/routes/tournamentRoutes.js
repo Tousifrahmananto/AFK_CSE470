@@ -31,9 +31,6 @@ const {
   deleteMatchMedia,
 } = require("../controllers/tournamentController");
 
-const { protect } = require("../middlewares/authMiddleware");
-const { isAdmin } = require("../middlewares/adminMiddleware");
-const uploader = require("../utils/uploader");
 
 // Public list
 router.get("/", getAllTournaments);
@@ -68,14 +65,8 @@ router.post("/:id/unregister-solo", protect, unregisterSolo);
 router.post("/:id/unregister-team", protect, unregisterTeam);
 
 // Match media (admin)
-router.get("/:id/matches/:r/:m/media", protect, isAdmin, getMatchMedia);
-router.post(
-  "/:id/matches/:r/:m/media",
-  protect,
-  isAdmin,
-  uploader.array("files", 8), // field name "files", up to 8 items
-  uploadMatchMedia
-);
+router.get("/:id/matches/:r/:m/media", getMatchMedia);
+router.post("/:id/matches/:r/:m/media", protect, isAdmin, uploader.array("files"), uploadMatchMedia);
 router.delete("/:id/matches/:r/:m/media", protect, isAdmin, deleteMatchMedia);
 
 

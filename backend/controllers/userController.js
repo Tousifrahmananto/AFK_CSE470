@@ -1,33 +1,27 @@
+// backend/controllers/userController.js
 const mongoose = require("mongoose");
 const User = require("../models/User");
 const Team = require("../models/Team");
 const Tournament = require("../models/Tournament");
 
-/** Lightweight user info used by roster/stat tools */
+/* ----------------------- public/profile helpers ----------------------- */
 async function getUserPublic(req, res) {
   try {
     const u = await User.findById(req.params.id)
-      .select("_id username email role")
-      .lean();
+      .select("_id username email role isBanned banned createdAt updatedAt");
     if (!u) return res.status(404).json({ message: "User not found" });
     res.json(u);
-  } catch (err) {
+  } catch (e) {
     res.status(500).json({ message: "Failed to fetch user" });
   }
 }
 
-// ---------- helpers ----------
 async function addEffectiveTeam(userLean) {
-  // if already populated, keep it
   if (userLean.team && typeof userLean.team === "object") return userLean;
-
-  // fall back to membership search
   const membership = await Team.findOne({ members: userLean._id })
     .select("teamName name logoUrl")
     .lean();
-
-  if (membership) return { ...userLean, team: membership };
-  return userLean;
+  return membership ? { ...userLean, team: membership } : userLean;
 }
 
 async function fetchJoinedTournaments(userId, teamId) {
@@ -48,7 +42,7 @@ async function fetchJoinedTournaments(userId, teamId) {
   ].sort((a, b) => new Date(a.startDate || 0) - new Date(b.startDate || 0));
 }
 
-// ---------- main profile handlers ----------
+/* ----------------------------- profile APIs ----------------------------- */
 async function getUserProfile(req, res) {
   try {
     const { id } = req.params;
@@ -67,7 +61,7 @@ async function getUserProfile(req, res) {
     const teamId = user.team?._id;
     const joinedTournaments = await fetchJoinedTournaments(user._id, teamId);
 
-    return res.json({ ...user, joinedTournaments });
+    res.json({ ...user, joinedTournaments });
   } catch (err) {
     res.status(500).json({ message: "Server error", error: err.message });
   }
@@ -87,7 +81,7 @@ async function getMe(req, res) {
     const tournaments = await fetchJoinedTournaments(me._id, teamId);
 
     res.json({ user: me, tournaments });
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: "Failed to load profile" });
   }
 }
@@ -105,14 +99,107 @@ async function getMyTournaments(req, res) {
 
     const items = await fetchJoinedTournaments(req.user.userId, teamId);
     res.json(items);
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: "Failed to fetch your tournaments" });
   }
 }
 
+/* ------------------------------ moderation ------------------------------ */
+/** GET /api/users/admin  (existing: returns array) */
+async function adminListUsers(req, res) {
+  try {
+    // diagnostic logging for debugging 500s from the moderation endpoint
+    console.log("adminListUsers called", {
+      query: req.query,
+      user: req.user ? { id: req.user.userId, role: req.user.role } : null,
+    });
+    const { q = "", role = "All", bannedOnly = "false" } = req.query;
+
+    const filter = { role: { $nin: ["Sponsor", "Partner"] } };
+    if (role !== "All") filter.role = role;
+    if (bannedOnly === "true") filter.$or = [{ isBanned: true }, { banned: true }];
+
+    if (q.trim()) {
+      // escape user input to avoid "Invalid regular expression" runtime errors
+      const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const rx = new RegExp(escapeRegex(q.trim()), "i");
+      filter.$or = [
+        ...(filter.$or || []),
+        { username: rx },
+        { email: rx },
+        { name: rx },
+      ];
+    }
+
+    console.log("adminListUsers filter:", JSON.stringify(filter));
+    const users = await User.find(filter)
+      .select("_id name username email role isBanned banned bannedAt bannedReason createdAt")
+      .sort({ createdAt: -1 })
+      .limit(1000)
+      .lean();
+
+    res.json(users);
+  } catch (e) {
+    console.error("adminListUsers error:", e && e.stack ? e.stack : e);
+    // include error message in response temporarily for debugging (non-production)
+    res.status(500).json({ message: "Failed to load users", error: e?.message || String(e) });
+  }
+}
+
+/** POST /api/users/:id/soft-ban { reason? } */
+async function softBanUser(req, res) {
+  try {
+    const { id } = req.params;
+    const { reason = "" } = req.body || {};
+
+    const u = await User.findById(id);
+    if (!u) return res.status(404).json({ message: "User not found" });
+    if (["Sponsor", "Partner"].includes(u.role)) {
+      return res.status(400).json({ message: "Cannot ban this role from this panel" });
+    }
+
+    u.isBanned = true;
+    u.banned = true;
+    u.bannedAt = new Date();
+    u.bannedReason = reason || "Violation of rules";
+    await u.save();
+
+    res.json({ message: "User soft-banned", id: u._id, banned: true });
+  } catch (e) {
+    console.error("softBanUser error:", e);
+    res.status(500).json({ message: "Failed to ban user" });
+  }
+}
+
+/** POST /api/users/:id/unban */
+async function unbanUser(req, res) {
+  try {
+    const { id } = req.params;
+    const u = await User.findById(id);
+    if (!u) return res.status(404).json({ message: "User not found" });
+
+    u.isBanned = false;
+    u.banned = false;
+    u.bannedAt = null;
+    u.bannedReason = "";
+    await u.save();
+
+    res.json({ message: "User unbanned", id: u._id, banned: false });
+  } catch (e) {
+    console.error("unbanUser error:", e);
+    res.status(500).json({ message: "Failed to unban user" });
+  }
+}
+
 module.exports = {
+  // profile
   getUserPublic,
   getUserProfile,
   getMe,
   getMyTournaments,
+
+  // moderation
+  adminListUsers,
+  softBanUser,
+  unbanUser,
 };

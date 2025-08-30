@@ -9,6 +9,7 @@ import {
 } from "../services/tournamentService";
 import { AuthContext } from "../context/AuthContext";
 import { Link } from "react-router-dom";
+import AdSlot from "../components/AdSlot"; // ← added
 
 export default function TournamentsPage() {
   const { user, token } = useContext(AuthContext);
@@ -102,7 +103,7 @@ export default function TournamentsPage() {
           gap: 20px;
         }
 
-        /* 12‑col responsive: 12 on mobile, 6 on tablet, 4 on desktop */
+        /* 12-col responsive: 12 on mobile, 6 on tablet, 4 on desktop */
         .tour-card {
           grid-column: span 12;
           background: #0b0b0f;
@@ -202,6 +203,11 @@ export default function TournamentsPage() {
         <div className="tp-header">
           <h1 className="tp-title">Tournaments</h1>
           <p className="tp-sub">Explore upcoming events and manage your registrations.</p>
+        </div>
+
+        {/* === Sponsor/Partner Ads (non-intrusive) === */}
+        <div style={{ margin: "0 0 18px 0" }}>
+          <AdSlot category="TournamentPage" />
         </div>
 
         {loading && <div className="tp-empty">Loading…</div>}

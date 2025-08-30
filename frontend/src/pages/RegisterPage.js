@@ -29,7 +29,7 @@ export default function RegisterPage() {
         <div style={wrap}>
             <div style={card}>
                 <h2 style={{ margin: "0 0 12px 0" }}>Create your account</h2>
-                <form onSubmit={onSubmit} style={{ display: "grid", gap: 10 }}>
+                <form onSubmit={onSubmit} style={{ display: "grid", gap: 10, width: "100%" }}>
                     <input
                         name="username"
                         placeholder="Username"
@@ -88,6 +88,7 @@ const card = {
     border: "1px solid #232838",
     borderRadius: 12,
     padding: 20,
+    boxSizing: "border-box",
     color: "#e8ecf2",
 };
 const input = {
@@ -97,6 +98,8 @@ const input = {
     background: "#0f1320",
     border: "1px solid #232838",
     color: "#e8ecf2",
+    boxSizing: "border-box",
+    minWidth: 0,
 };
 const btn = {
     padding: "10px 12px",
@@ -105,4 +108,5 @@ const btn = {
     color: "#fff",
     border: 0,
     cursor: "pointer",
+    boxSizing: "border-box",
 };

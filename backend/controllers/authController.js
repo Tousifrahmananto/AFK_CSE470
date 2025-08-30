@@ -58,7 +58,9 @@ const loginUser = async (req, res) => {
 
         const user = await User.findOne({ email });
         if (!user) return res.status(404).json({ message: "User not found" });
-
+        if (user && user.isBanned) {
+            return res.status(403).json({ message: "This account has been banned by an administrator." });
+        }
         const ok = await bcrypt.compare(password, user.password);
         if (!ok) return res.status(401).json({ message: "Invalid credentials" });
 

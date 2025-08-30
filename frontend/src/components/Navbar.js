@@ -1,6 +1,6 @@
 // src/components/Navbar.js
 import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { io as socketIO } from "socket.io-client";
 import { AuthContext } from "../context/AuthContext";
@@ -98,6 +98,7 @@ export default function Navbar() {
     if (role === "Admin") {
       base.push({ to: "/admin/create-tournament", label: "Create Tournament" });
       base.push({ to: "/ads/mine", label: "Manage Ads" }); // admin ad management
+      base.push({ to: "/admin/user-moderation", label: "User Moderation" }); // 👈 ADDED
     }
     if (role === "TeamManager") {
       base.push({ to: "/create-team", label: "Create Team" });
@@ -121,6 +122,18 @@ export default function Navbar() {
           {leftLinks.map((l) => (
             <Link key={l.to} to={l.to}>{l.label}</Link>
           ))}
+          {/* Media NavLink (styled, shows active state) */}
+          <NavLink
+            to="/media"
+            style={({ isActive }) => ({
+              color: '#e6edf3',
+              textDecoration: 'none',
+              marginRight: 14,
+              fontWeight: isActive ? 800 : 400,
+            })}
+          >
+            Media
+          </NavLink>
         </div>
 
         <div className="right">
